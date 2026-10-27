@@ -1,0 +1,412 @@
+<title>Lucciole</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Nunito:wght@400;700;800&display=swap">
+<style>
+  /* Layout: one full-screen night meadow; HUD floats on top, cards sit in the middle. Single dark world by choice. */
+  :root {
+    --night: #0b1026;
+    --night-2: #1d2658;
+    --glow: #e6f27a;
+    --gold: #ffc65c;
+    --ink: #eef0ff;
+    --muted: #a3acdb;
+    --panel: rgba(14, 20, 52, 0.72);
+    --line: rgba(230, 242, 122, 0.25);
+    --warn: #ff8f7a;
+    --display: "Caprasimo", "Georgia", serif;
+    --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--night);
+    color: var(--ink);
+    font-family: var(--body);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #app { position: relative; height: 100%; width: 100%; overflow: hidden; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+    padding-block: 14px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    pointer-events: none;
+  }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat.right { align-items: flex-end; }
+  .label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .value { font-family: var(--display); font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--glow); text-shadow: 0 0 18px rgba(230, 242, 122, 0.45); }
+  #time.value { color: var(--ink); text-shadow: none; }
+  #time.low { color: var(--warn); }
+  .pop { animation: pop 0.35s ease-out; }
+  @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+  .overlay {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding-block: 24px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .card {
+    width: 100%; max-width: 360px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    padding: 28px 24px 24px;
+    display: flex; flex-direction: column; gap: 14px; text-align: center;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  }
+  h1 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 52px; line-height: 1; color: var(--glow); text-shadow: 0 0 28px rgba(230, 242, 122, 0.5); text-wrap: balance; }
+  h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 30px; line-height: 1.1; text-wrap: balance; }
+  p { margin: 0; line-height: 1.5; color: var(--muted); font-size: 15px; }
+  .rules { display: grid; gap: 8px; text-align: left; margin: 4px 0; padding: 0; list-style: none; }
+  .rules li { display: flex; gap: 10px; align-items: center; font-size: 15px; color: var(--ink); }
+  .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--glow); box-shadow: 0 0 10px 2px rgba(230, 242, 122, 0.7); }
+  .dot.gold { background: var(--gold); box-shadow: 0 0 10px 2px rgba(255, 198, 92, 0.8); }
+  .dot.dim { background: #5a6070; box-shadow: none; }
+  .big { font-family: var(--display); font-size: 72px; line-height: 1; color: var(--glow); text-shadow: 0 0 30px rgba(230, 242, 122, 0.55); font-variant-numeric: tabular-nums; }
+  .rank { font-weight: 800; color: var(--ink); font-size: 17px; }
+  .best { font-size: 14px; color: var(--muted); }
+  .best b { color: var(--gold); }
+  button {
+    margin-top: 6px;
+    font: 800 18px var(--body);
+    color: var(--night);
+    background: var(--glow);
+    border: 0; border-radius: 999px;
+    padding: 15px 22px;
+    cursor: pointer;
+    box-shadow: 0 0 24px rgba(230, 242, 122, 0.45);
+    transition: transform 0.12s ease;
+  }
+  button:active { transform: scale(0.96); }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
+</style>
+
+<div id="app">
+  <canvas id="c" aria-label="Prato notturno con lucciole"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div class="stat">
+      <span class="label">Barattolo</span>
+      <span class="value" id="score">0</span>
+    </div>
+    <div class="stat right">
+      <span class="label">Secondi</span>
+      <span class="value" id="time">45</span>
+    </div>
+  </div>
+
+  <div class="overlay" id="start">
+    <div class="card">
+      <h1>Lucciole</h1>
+      <p>Una notte d'estate, un prato e un barattolo vuoto.</p>
+      <ul class="rules">
+        <li><span class="dot"></span>Tocca una lucciola mentre è accesa</li>
+        <li><span class="dot dim"></span>Quando è spenta ti scappa</li>
+        <li><span class="dot gold"></span>Le dorate valgono 5</li>
+        <li><span class="dot"></span>Prese di fila danno un bonus</li>
+      </ul>
+      <p class="best" id="bestStart"></p>
+      <button id="play" type="button">Inizia la notte</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="end" hidden>
+    <div class="card">
+      <h2>Alba!</h2>
+      <p>Nel barattolo hai</p>
+      <div class="big" id="final">0</div>
+      <p class="rank" id="rank"></p>
+      <p class="best" id="bestEnd"></p>
+      <button id="again" type="button">Ancora una notte</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const ROUND = 45;
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const scoreEl = $('score'), timeEl = $('time');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let W = 0, H = 0, DPR = 1;
+  let stars = [], grassBack = [], grassFront = [];
+  let flies = [], particles = [], floats = [], flying = [], ripples = [];
+  let state = 'idle', score = 0, left = ROUND, lastCatch = -10, combo = 0, clock = 0;
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('lucciole-best') || '0', 10) || 0; } catch (e) {}
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  function resize() {
+    const r = cv.getBoundingClientRect();
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    buildScene();
+  }
+
+  function buildScene() {
+    stars = Array.from({ length: Math.round(W * H / 5000) }, () => ({
+      x: Math.random() * W, y: Math.random() * H * 0.6, r: rand(0.4, 1.4), ph: rand(0, 6.28)
+    }));
+    const blades = (n, hMin, hMax) => Array.from({ length: n }, () => ({
+      x: Math.random() * W, h: rand(hMin, hMax), w: rand(2, 5), ph: rand(0, 6.28)
+    }));
+    grassBack = blades(Math.round(W / 4), H * 0.08, H * 0.22);
+    grassFront = blades(Math.round(W / 6), H * 0.04, H * 0.12);
+  }
+
+  function spawnFly(fadeIn = true) {
+    const gold = state === 'play' && Math.random() < 0.07;
+    flies.push({
+      x: rand(30, W - 30), y: rand(H * 0.18, H * 0.82),
+      a: rand(0, 6.28), sp: gold ? rand(55, 80) : rand(22, 45),
+      freq: gold ? rand(2.6, 3.4) : rand(1.1, 2.2), ph: rand(0, 6.28),
+      gold, age: fadeIn ? 0 : 1, life: rand(9, 15), t: 0
+    });
+  }
+
+  function brightness(f) {
+    const v = (Math.sin(clock * f.freq + f.ph) - 0.2) / 0.8;
+    return v > 0 ? Math.pow(v, 0.7) : 0;
+  }
+
+  function targetCount() {
+    if (state !== 'play') return 9;
+    return 7 + Math.floor((1 - left / ROUND) * 7);
+  }
+
+  function scoreTarget() {
+    const a = cv.getBoundingClientRect(), b = scoreEl.getBoundingClientRect();
+    return { x: b.left - a.left + b.width / 2, y: b.top - a.top + b.height / 2 };
+  }
+
+  function bump(el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+
+  function catchFly(f) {
+    const now = clock;
+    combo = now - lastCatch < 1.3 ? combo + 1 : 1;
+    lastCatch = now;
+    const bonus = Math.floor((combo - 1) / 2);
+    const pts = (f.gold ? 5 : 1) + bonus;
+    score += pts;
+    flies.splice(flies.indexOf(f), 1);
+    flying.push({ x: f.x, y: f.y, sx: f.x, sy: f.y, t: 0, gold: f.gold, pts });
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, 6.28), s = rand(40, 140);
+      particles.push({ x: f.x, y: f.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, gold: f.gold });
+    }
+    const label = combo > 2 ? `+${pts}  serie ×${combo}` : `+${pts}`;
+    floats.push({ x: f.x, y: f.y - 14, text: label, t: 0, gold: f.gold || combo > 2 });
+    try { navigator.vibrate && navigator.vibrate(f.gold ? [15, 30, 15] : 12); } catch (e) {}
+  }
+
+  cv.addEventListener('pointerdown', e => {
+    if (state !== 'play') return;
+    const r = cv.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    let hit = null, hd = 1e9;
+    for (const f of flies) {
+      const d = Math.hypot(f.x - x, f.y - y);
+      if (d < 46 && brightness(f) > 0.18 && f.age > 0.5 && d < hd) { hit = f; hd = d; }
+    }
+    if (hit) catchFly(hit);
+    else { ripples.push({ x, y, t: 0 }); combo = 0; }
+  });
+
+  function start() {
+    state = 'play'; score = 0; left = ROUND; combo = 0; lastCatch = -10;
+    flies = []; flying = []; floats = []; particles = [];
+    for (let i = 0; i < 7; i++) spawnFly();
+    scoreEl.textContent = '0'; timeEl.textContent = ROUND; timeEl.classList.remove('low');
+    $('start').hidden = true; $('end').hidden = true; $('hud').hidden = false;
+  }
+
+  function rankFor(n) {
+    if (n >= 60) return 'Regina delle lucciole';
+    if (n >= 40) return 'Guardiano del prato';
+    if (n >= 22) return 'Esploratore notturno';
+    if (n >= 10) return 'Cacciatore alle prime armi';
+    return 'Sognatore a occhi aperti';
+  }
+
+  function finish() {
+    state = 'end';
+    const record = score > best;
+    if (record) { best = score; try { localStorage.setItem('lucciole-best', String(best)); } catch (e) {} }
+    $('final').textContent = score;
+    $('rank').textContent = rankFor(score);
+    $('bestEnd').innerHTML = record && score > 0 ? '<b>Nuovo record!</b>' : `Record: <b>${best}</b>`;
+    $('hud').hidden = true; $('end').hidden = false;
+    showBest();
+  }
+
+  function showBest() { $('bestStart').innerHTML = best > 0 ? `Il tuo record: <b>${best}</b>` : ''; }
+
+  $('play').addEventListener('click', start);
+  $('again').addEventListener('click', start);
+  showBest();
+
+  // ---------- drawing ----------
+  function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#070b1e'); g.addColorStop(0.65, '#1d2658'); g.addColorStop(1, '#2a2f63');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (const s of stars) {
+      ctx.globalAlpha = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(clock * 1.3 + s.ph));
+      ctx.fillStyle = '#dfe4ff';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.28); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    const mx = W * 0.78, my = H * 0.14, mr = Math.min(W, H) * 0.06 + 10;
+    const mg = ctx.createRadialGradient(mx, my, mr * 0.5, mx, my, mr * 4);
+    mg.addColorStop(0, 'rgba(255,244,214,0.22)'); mg.addColorStop(1, 'rgba(255,244,214,0)');
+    ctx.fillStyle = mg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff4d6';
+    ctx.beginPath(); ctx.arc(mx, my, mr, 0, 6.28); ctx.fill();
+    ctx.fillStyle = '#1a2150';
+    ctx.beginPath(); ctx.arc(mx + mr * 0.42, my - mr * 0.18, mr * 0.9, 0, 6.28); ctx.fill();
+  }
+
+  function drawGrass(list, color, amp) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (const b of list) {
+      const sway = reduced ? 0 : Math.sin(clock * 0.9 + b.ph) * amp;
+      ctx.moveTo(b.x - b.w, H);
+      ctx.quadraticCurveTo(b.x - b.w * 0.3 + sway * 0.4, H - b.h * 0.6, b.x + sway, H - b.h);
+      ctx.quadraticCurveTo(b.x + b.w * 0.3 + sway * 0.4, H - b.h * 0.6, b.x + b.w, H);
+    }
+    ctx.fill();
+  }
+
+  function glow(x, y, r, color, alpha) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${color},${alpha})`);
+    g.addColorStop(0.25, `rgba(${color},${alpha * 0.45})`);
+    g.addColorStop(1, `rgba(${color},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 6.28); ctx.fill();
+  }
+
+  const GREEN = '230,242,122', GOLD = '255,198,92';
+
+  function step(dt) {
+    clock += dt;
+
+    if (state === 'play') {
+      left -= dt;
+      const shown = Math.max(0, Math.ceil(left));
+      if (timeEl.textContent !== String(shown)) {
+        timeEl.textContent = shown;
+        timeEl.classList.toggle('low', shown <= 10);
+      }
+      if (left <= 0) finish();
+    }
+
+    while (flies.length < targetCount()) spawnFly();
+
+    for (let i = flies.length - 1; i >= 0; i--) {
+      const f = flies[i];
+      f.t += dt;
+      f.a += rand(-1, 1) * 2.2 * dt;
+      f.x += Math.cos(f.a) * f.sp * dt;
+      f.y += Math.sin(f.a) * f.sp * dt + Math.sin(clock * 2 + f.ph) * 6 * dt;
+      if (f.x < 20 || f.x > W - 20) { f.a = Math.PI - f.a; f.x = Math.min(W - 20, Math.max(20, f.x)); }
+      if (f.y < H * 0.14 || f.y > H * 0.86) { f.a = -f.a; f.y = Math.min(H * 0.86, Math.max(H * 0.14, f.y)); }
+      if (f.t < f.life) f.age = Math.min(1, f.age + dt * 1.5);
+      else { f.age -= dt * 1.2; if (f.age <= 0) flies.splice(i, 1); }
+    }
+
+    const tgt = scoreTarget();
+    for (let i = flying.length - 1; i >= 0; i--) {
+      const p = flying[i];
+      p.t += dt * 1.8;
+      const e = 1 - Math.pow(1 - Math.min(1, p.t), 3);
+      p.x = p.sx + (tgt.x - p.sx) * e;
+      p.y = p.sy + (tgt.y - p.sy) * e - Math.sin(e * Math.PI) * 60;
+      if (p.t >= 1) {
+        flying.splice(i, 1);
+        if (state === 'play') { scoreEl.textContent = score; bump(scoreEl); }
+      }
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94; p.life -= dt * 1.6;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+    for (let i = floats.length - 1; i >= 0; i--) { floats[i].t += dt; if (floats[i].t > 1) floats.splice(i, 1); }
+    for (let i = ripples.length - 1; i >= 0; i--) { ripples[i].t += dt * 2.5; if (ripples[i].t > 1) ripples.splice(i, 1); }
+  }
+
+  function draw() {
+    drawSky();
+    drawGrass(grassBack, '#121939', 5);
+
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of flies) {
+      const b = brightness(f) * f.age;
+      const col = f.gold ? GOLD : GREEN;
+      if (b > 0.02) glow(f.x, f.y, 10 + 26 * b, col, 0.9 * b);
+      ctx.fillStyle = `rgba(${col},${0.18 * f.age + 0.8 * b})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.gold ? 3 : 2.4, 0, 6.28); ctx.fill();
+    }
+    for (const p of flying) {
+      glow(p.x, p.y, 22, p.gold ? GOLD : GREEN, 0.9);
+    }
+    for (const p of particles) {
+      ctx.fillStyle = `rgba(${p.gold ? GOLD : GREEN},${p.life})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, 6.28); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    for (const r of ripples) {
+      ctx.strokeStyle = `rgba(163,172,219,${0.5 * (1 - r.t)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(r.x, r.y, 8 + 26 * r.t, 0, 6.28); ctx.stroke();
+    }
+
+    drawGrass(grassFront, '#05081a', 3);
+
+    ctx.textAlign = 'center';
+    ctx.font = '800 18px Nunito, system-ui, sans-serif';
+    for (const fl of floats) {
+      ctx.globalAlpha = 1 - fl.t;
+      ctx.fillStyle = fl.gold ? '#ffc65c' : '#eef0ff';
+      ctx.fillText(fl.text, fl.x, fl.y - fl.t * 34);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    step(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  for (let i = 0; i < 9; i++) spawnFly(false);
+  requestAnimationFrame(frame);
+})();
+</script>
